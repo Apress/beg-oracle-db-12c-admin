@@ -1,0 +1,460 @@
+Chapter 2
+
+Page 26, Listing 2-1
+
+SELECT first_name, last_name
+  FROM employees
+ WHERE upper(first_name) = 'STEVEN'
+   AND upper(last_name) = 'KING';
+
+
+Page 26, Listing 2-2
+
+select to_char(sysdate, 'DAY') from dual;
+
+
+Page 29, Average Salary Query
+
+SELECT upper(department_name),
+  AVG(salary)
+FROM departments d,
+  employees e
+WHERE e.department_id = d.department_id
+GROUP BY upper(department_name)
+ORDER BY AVG(salary) DESC;
+
+
+Page 30, Listing 2-4
+
+CREATE TABLE employees
+(
+  employee_id NUMBER(6,0),
+  first_name VARCHAR2(20),
+  last_name VARCHAR2(25) CONSTRAINT emp_last_name_nn NOT NULL enable,
+  email VARCHAR2(25) CONSTRAINT emp_email_nn NOT NULL enable,
+  phone_number VARCHAR2(20),
+  hire_date DATE CONSTRAINT emp_hire_date_nn NOT NULL enable,
+  job_id VARCHAR2(10) CONSTRAINT emp_job_nn NOT NULL enable,
+  salary NUMBER(8,2),
+  commission_pct NUMBER(2,2),
+  manager_id NUMBER(6,0),
+  department_id NUMBER(4,0),
+  CONSTRAINT emp_salary_min CHECK (salary > 0) enable,
+  CONSTRAINT emp_email_uk UNIQUE (email) enable,
+  CONSTRAINT emp_emp_id_pk PRIMARY KEY (employee_id) enable,
+  CONSTRAINT emp_dept_fk FOREIGN KEY (department_id)
+    REFERENCES departments (department_id) enable,
+  CONSTRAINT emp_job_fk FOREIGN KEY (job_id)
+    REFERENCES jobs (job_id) enable,
+  CONSTRAINT emp_manager_fk FOREIGN KEY (manager_id)
+    REFERENCES employees (employee_id) enable
+)
+
+
+Page 31, Listing 2-5
+
+INSERT
+INTO employees
+(
+  employee_id,
+  first_name,
+  last_name,
+  email,
+  phone_number,
+  hire_date,
+  job_id,
+  salary,
+  commission_pct,
+  manager_id,
+  department_id
+)
+VALUES
+(
+  100,
+  'Steven',
+  'King',
+  'SKING',
+  '515.123.4567',
+  TO_DATE('17-JUN-1987', 'dd-MON-yyyy'),
+  'AD_PRES',
+  24000,
+  NULL,
+  NULL,
+  90
+);
+
+
+Page 32, Listing 2-6
+
+UPDATE employees SET email='NKOCHHAR' WHERE employee_id=100;
+
+
+Page 32, Listing 2-7
+
+DELETE FROM employees WHERE employee_id = 101;
+
+
+Page 33, Listing 2-8
+
+MERGE INTO employees e USING employee_updates u ON (
+  e.employee_id = u.employee_id)
+WHEN matched THEN
+  UPDATE
+  SET last_name = u.last_name,
+    email = u.email,
+    phone_number = u.phone_number,
+    hire_date = u.hire_date,
+    job_id = u.job_id,
+    salary = u.salary,
+    commission_pct = u.commission_pct,
+    manager_id = u.manager_id,
+    department_id = u.department_id
+  DELETE WHERE terminated = 1
+  WHEN NOT matched THEN
+  INSERT
+    (
+    employee_id,
+    first_name,
+    last_name,
+    email,
+    phone_number,
+    hire_date,
+    job_id,
+    salary,
+    commission_pct,
+    manager_id,
+    department_id
+    )
+  VALUES
+    (
+    u.employee_id,
+    u.first_name,
+    u.last_name,
+    u.email,
+    u.phone_number,
+    u.hire_date,
+    u.job_id,
+    u.salary,
+    u.commission_pct,
+    u.manager_id,
+    u.department_id
+  );
+
+
+Page 34, Listing 2-9
+
+import sqlj.runtime.*;
+import sqlj.runtime.ref.*;
+import java.sql.*;
+
+public class PrintQuote
+{
+  public static void main(String[] args)
+  {
+    Connection connection = null;
+	
+    #sql iterator quote_iterator (
+      String partname,
+      double quote);
+	  
+    quote_iterator quote = null;
+    try
+    {
+	
+      // Connect to the database
+      // The account name and password are provided to the program by the user
+	  
+      DriverManager.registerDriver(
+        new oracle.jdbc.driver.OracleDriver());
+      connection = DriverManager.getConnection(
+        "jdbc:oracle:thin:@localhost:1521:ORCL",
+        args[0],
+        args[1]);
+      DefaultContext.setDefaultContext(
+        new DefaultContext(connection));
+		
+      // Retrieve the data for one supplier
+      // The supplier's name is provided to the program by the user
+	  
+      String suppliername = args[2];
+	  
+      #sql quote = {
+        SELECT
+          upper(department_name) AS department_name,
+          AVG(salary) AS average_salary
+        FROM
+          departments d,
+          employees e
+        WHERE e.department_id = d.department_id
+        GROUP BY upper(department_name)
+        ORDER BY AVG(salary) DESC
+      };
+		
+      // Print one row of data on each line
+		
+      while (quote.next()) {
+        System.out.printf(
+          "%-40s%10.2f\n",
+          quote.department_name(),
+          quote.average_salary());
+      }
+		
+      connection.close();
+    }
+    catch (SQLException exception) {
+      exception.printStackTrace();
+    }
+  }
+}
+
+
+Page 35, Listing 2-10
+
+-- Print page titles and a closing line
+SET pagesize 66
+SET linesize 74
+TTITLE center "SALARY LISTING" RIGHT "Page:" sql.pno skip 2
+REPFOOTER skip 1 center "END OF REPORT"
+
+-- Print suitable titles for each column of information
+COLUMN deartment_name format a30 heading "Department Name"
+COLUMN employee_name format a30 heading "Employee Name"
+COLUMN salary format 99999990.00 heading "Salary"
+
+-- Print the department name only once and skip a line when the supplier name changes
+BREAK ON department_name skip 1
+
+-- Print the number of parts supplied by each supplier
+COMPUTE AVG OF salary ON department_name
+
+-- Print all information in the quote table
+SELECT upper(department_name) AS department_name,
+  upper(last_name || ', ' ||first_name) AS employee_name,
+  salary
+FROM departments d,
+  employees e
+WHERE e.department_id = d.department_id
+ORDER BY department_name,
+  employee_name;
+
+
+Page 37, Listing 2-12
+
+SELECT DISTINCT d.department_name
+FROM departments d,
+  employees e
+WHERE e.department_id = d.department_id
+AND e.job_id = 'SH_CLERK';
+
+SELECT DISTINCT d.department_name
+FROM departments d NATURAL
+JOIN employees e
+WHERE e.job_id = 'SH_CLERK';
+
+SELECT DISTINCT d.department_name
+FROM departments d
+JOIN employees e USING (department_id)
+WHERE e.job_id = 'SH_CLERK';
+
+SELECT DISTINCT d.department_name
+FROM departments d
+JOIN employees e
+ON (e.department_id = d.department_id)
+WHERE e.job_id = 'SH_CLERK';
+
+SELECT department_name
+FROM departments
+WHERE department_id IN
+  ( SELECT department_id FROM employees WHERE job_id = 'SH_CLERK'
+  );
+  
+SELECT department_name
+FROM departments d
+WHERE department_id = ANY
+  ( SELECT department_id FROM employees e WHERE job_id = 'SH_CLERK'
+  );
+
+SELECT department_name
+FROM departments d
+WHERE 'SH_CLERK' IN
+  ( SELECT job_id FROM employees e WHERE e.department_id = d.department_id
+  );
+  
+SELECT department_name FROM departments
+MINUS
+SELECT department_name
+FROM departments d
+WHERE 'SH_CLERK' NOT IN
+  ( SELECT job_id FROM employees e WHERE e.department_id = d.department_id
+  );
+  
+SELECT d.department_name
+FROM departments d
+WHERE 'SH_CLERK' = ANY
+  ( SELECT job_id FROM employees WHERE department_id = d.department_id
+  );
+  
+SELECT d.department_name
+FROM departments d
+WHERE EXISTS
+  (SELECT *
+  FROM employees
+  WHERE department_id = d.department_id
+  AND job_id = 'SH_CLERK'
+  );
+  
+SELECT department_name FROM departments
+MINUS
+SELECT department_name
+FROM departments d
+WHERE NOT EXISTS
+  (SELECT *
+  FROM employees
+  WHERE department_id = d.department_id
+  AND job_id = 'SH_CLERK'
+  );
+  
+SELECT department_name
+FROM departments d
+WHERE (SELECT COUNT(*)
+  FROM employees
+  WHERE department_id = d.department_id
+  AND job_id = 'SH_CLERK' ) > 0;
+
+SELECT DISTINCT d.department_name
+FROM departments d
+LEFT JOIN employees e
+ON (e.department_id = d.department_id)
+WHERE e.job_id = 'SH_CLERK';
+
+SELECT DISTINCT d.department_name
+FROM departments d,
+  lateral
+  (SELECT 1
+  FROM employees e
+  WHERE e.department_id = d.department_id
+  AND e.job_id = 'SH_CLERK'
+  );
+
+
+Page 39, Listing 2-13
+
+SELECT employee_id
+FROM employees e
+WHERE NOT EXISTS
+  (SELECT *
+  FROM jobs j
+  WHERE job_id LIKE 'AC%'
+  AND NOT ( e.job_id = j.job_id
+  OR EXISTS
+    (SELECT *
+    FROM job_history
+    WHERE employee_id = e.employee_id
+    AND job_id = j.job_id
+    ) )
+  );
+
+SELECT employee_id
+FROM
+  ( SELECT employee_id, job_id FROM job_history WHERE job_id LIKE 'AC%'
+  UNION
+  SELECT employee_id, job_id FROM employees WHERE job_id LIKE 'AC%'
+  )
+  GROUP BY employee_id
+  HAVING COUNT(DISTINCT job_id) =
+    (SELECT COUNT(*) FROM jobs WHERE job_id LIKE 'AC%'
+    );
+
+
+Page 40, Nullable Data Items
+
+SELECT COUNT(*) FROM employees WHERE manager_id = 100 OR manager_id != 100;
+SELECT COUNT(*) FROM employees WHERE manager_id = manager_id;
+SELECT COUNT(*) FROM employees WHERE manager_id != -1;
+
+
+Page 43, Listing 2-14
+
+CREATE OR REPLACE
+PROCEDURE employee_updates_proc
+IS
+  CURSOR l_cursor
+  IS
+    SELECT terminated,
+      employee_id,
+      first_name,
+      last_name,
+      email,
+      phone_number,
+      hire_date,
+      job_id,
+      salary,
+      commission_pct,
+      manager_id,
+      department_id
+    FROM employee_updates;
+  l_record l_cursor%rowtype;
+  l_count pls_integer;
+BEGIN
+  OPEN l_cursor;
+  FETCH l_cursor INTO l_record;
+  WHILE NOT l_cursor%notfound
+  LOOP
+    l_count := 0;
+    SELECT COUNT(*)
+    INTO l_count
+    FROM employees
+    WHERE employee_id = l_record.employee_id;
+    IF l_count = 1 THEN
+      IF l_record.terminated = 1 THEN
+        DELETE FROM employees WHERE employee_id =
+          l_record.employee_id;
+      ELSE
+        UPDATE employees
+          SET last_name = l_record.last_name,
+            email = l_record.email,
+            phone_number = l_record.phone_number,
+            hire_date = l_record.hire_date,
+            job_id = l_record.job_id,
+            salary = l_record.salary,
+            commission_pct = l_record.commission_pct,
+            manager_id = l_record.manager_id,
+            department_id = l_record.department_id;
+      END IF;
+    ELSE
+      INSERT
+      INTO employees
+      (
+        employee_id,
+        first_name,
+        last_name,
+        email,
+        phone_number,
+        hire_date,
+        job_id,
+        salary,
+        commission_pct,
+        manager_id,
+        department_id
+      )
+      VALUES
+      (
+        l_record.employee_id,
+        l_record.first_name,
+        l_record.last_name,
+        l_record.email,
+        l_record.phone_number,
+        l_record.hire_date,
+        l_record.job_id,
+        l_record.salary,
+        l_record.commission_pct,
+        l_record.manager_id,
+        l_record.department_id
+      );
+    END IF;
+    FETCH l_cursor INTO l_record;
+  END LOOP;
+  CLOSE l_cursor;
+END;
+
+

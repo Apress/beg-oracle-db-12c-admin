@@ -1,0 +1,26 @@
+Chapter 5
+
+Page 76, Example tnsnames.ora entry
+
+orcl12c =
+  (description =
+    (address = (protocol = tcp)(host = 192.168.56.101)(PORT = 1521))
+    (connect_data =
+      (server = dedicated)
+      (service:name = orcl)
+    )
+  )
+  
+  
+Page 77, Example tnsnames.ora entry
+
+orcl12c =
+  (description =
+    (address = (protocol = tcp)(host = 192.168.56.101)(PORT = 1521))
+    (connect_data =
+      (server = dedicated)
+      (service:name = pdb1)
+    )
+  )
+  
+  

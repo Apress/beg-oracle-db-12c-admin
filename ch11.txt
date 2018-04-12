@@ -1,0 +1,59 @@
+Chapter 11
+
+Page 210, Deadlock Example
+
+CREATE TABLE parent (
+parent_ID INTEGER NOT NULL,
+CONSTRAINT parent_PK PRIMARY KEY (parent_id)
+);
+
+CREATE TABLE child (
+child_ID INTEGER NOT NULL,
+parent_ID INTEGER NOT NULL,
+CONSTRAINT child_PK PRIMARY KEY (child_id),
+CONSTRAINT child_FK FOREIGN KEY (parent_ID) references parent
+);
+
+INSERT INTO parent (parent_ID) values (1);
+INSERT INTO parent (parent_ID) values (2);
+INSERT INTO child (child_ID, parent_ID) values (1,1);
+INSERT INTO child (child_ID, parent_ID) values (2,2);
+
+
+Page 211, ORA-00600 Incident Example
+
+sqlplus hr/oracle@pdb1
+
+-- create a demo table
+CREATE TABLE scores AS
+SELECT o.object_type,
+o.object_name,
+TRUNC(dbms_random.value(1,101)) AS score
+FROM all_objects o;
+
+-- create an index
+CREATE INDEX scores_ix ON scores
+(object_type, score
+);
+
+-- list the top 3 scoring objects in each category
+WITH object_types(object_type) AS
+  ( SELECT MIN(object_type) FROM scores
+UNION ALL
+SELECT
+  (SELECT MIN(object_type) FROM scores WHERE object_type > u.object_type
+)
+FROM object_types u
+WHERE object_type IS NOT NULL
+)
+SELECT l.*
+FROM object_types o,
+lateral
+(SELECT /*+ INDEX(s) */ *
+FROM scores s
+WHERE s.object_type = o.object_type
+ORDER BY s.object_type,
+  s.score
+FETCH FIRST 3 ROWS ONLY
+) l;
+

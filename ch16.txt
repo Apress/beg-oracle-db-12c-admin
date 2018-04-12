@@ -1,0 +1,238 @@
+Chapter 16
+
+Page 302, Listing 16-5
+
+set linesize 132
+set pagesize 10000
+set tab off
+set trimout on
+set trimspool on
+set sqlblanklines on
+
+alter session set nls_date_format = 'yyyy/mm/dd hh24:mi';
+
+column aas_cpu format 999.99
+column aas_other format 999.99
+column aas_application format 999.99
+column aas_concurrency format 999.99
+column aas_commit format 999.99
+column aas_user_io format 999.99
+column aas_system_io format 999.99
+
+WITH
+  timed_events AS
+  -- Get wait time from the STATS$SYSTEM_EVENT table.
+  -- Select snapshots between start_snap_id and end_snap_id.
+  -- Convert wait microseconds into seconds.
+  -- Merge some wait classes into the "Other" class (wait_class# = 0).
+  -- Ignore the "Idle" class (wait_class = 6).
+  -- Wait classifications are those found in the V$EVENT_NAME view.
+  -- Get CPU usage from the STATS$SYSSTAT table.
+  -- Select snapshots between start_snap_id and end_snap_id.
+  -- Convert CPU centiseconds into seconds. 
+(SELECT snap_id,
+  CASE
+    WHEN wait_class# IN (0, 2, 3, 7, 10, 11, 12)
+    THEN 0
+    ELSE wait_class#
+  END AS wait_class#,
+  time_waited_micro / 1000000 AS time_spent
+FROM stats$system_event NATURAL JOIN v$event_name
+WHERE snap_id between &&start_snap_id and &&end_snap_id
+  AND wait_class# != 6
+UNION ALL
+SELECT snap_id,
+  100 as wait_class#,
+  VALUE / 100 as time_spent
+FROM stats$sysstat
+WHERE snap_id between &&start_snap_id and &&end_snap_id
+  AND name = 'CPU used by this session'),
+------------------------------------------------------------------------------------
+pivoted_data AS
+-- Create separate columns for each wait class and for CPU time.
+(SELECT *
+FROM (SELECT * from timed_events)
+  PIVOT (SUM(time_spent)
+  FOR wait_class# IN ( 0 AS other,
+    1 AS application,
+    4 AS concurrency,
+    5 AS commit,
+    8 AS user_io,
+    9 AS system_io,
+    100 AS cpu))),
+------------------------------------------------------------------------------------
+deltas AS
+-- Use the LAG analytic function to determine the amount of increase.
+-- Partition the rows by database startup time.
+-- The STATS$SNAPSHOT view tells us when the database was started.
+(SELECT snap_id,
+  snap_time,
+(snap_time - LAG(snap_time)
+  OVER (PARTITION BY startup_time ORDER BY snap_id)) * 86400
+  AS snap_time_d,
+cpu - LAG (cpu)
+  OVER (PARTITION BY startup_time ORDER BY snap_id)
+  AS cpu_d,
+other - LAG (other)
+  OVER (PARTITION BY startup_time ORDER BY snap_id)
+  AS other_d,
+application - LAG (application)
+  OVER (PARTITION BY startup_time ORDER BY snap_id)
+  AS application_d,
+concurrency - LAG (concurrency)
+  OVER (PARTITION BY startup_time ORDER BY snap_id)
+  AS concurrency_d,
+commit - LAG (commit)
+  OVER (PARTITION BY startup_time ORDER BY snap_id)
+  AS commit_d,
+user_io - LAG (user_io)
+  OVER (PARTITION BY startup_time ORDER BY snap_id)
+  AS user_io_d,
+system_io - LAG (system_io)
+  OVER (PARTITION BY startup_time ORDER BY snap_id)
+  AS system_io_d
+FROM pivoted_data NATURAL JOIN stats$snapshot)
+------------------------------------------------------------------------------------
+-- Compute and print Average Active Sessions for each category of time.
+SELECT snap_id,
+  snap_time,
+  cpu_d / snap_time_d AS aas_cpu,
+  other_d / snap_time_d AS aas_other,
+  application_d / snap_time_d AS aas_application,
+  concurrency_d / snap_time_d AS aas_concurrency,
+  commit_d / snap_time_d AS aas_commit,
+  user_io_d / snap_time_d AS aas_user_io,
+  system_io_d / snap_time_d AS aas_system_io
+FROM deltas
+ORDER BY snap_id;
+
+
+Page 306, Listing 16-6
+
+set linesize 132
+set pagesize 10000
+set tab off
+set trimout on
+set trimspool on
+set sqlblanklines on
+
+alter session set nls_date_format = 'mm/dd hh24:mi';
+
+column event format a30
+column time_spent_d format 9,999,999.90
+column aas format 9999.90
+column percentage format 999.90
+
+break on snap_id on snap_time skip 1
+
+WITH
+  timed_events AS
+  -- Get wait time from the STATS$SYSTEM_EVENT table.
+  -- Select snapshots between start_snap_id and end_snap_id.
+  -- Convert wait microseconds into seconds.
+  -- Ignore the "Idle" class (wait_class = 6).
+  -- Wait classifications are those found in the V$EVENT_NAME view.
+  -- Get CPU usage from the STATS$SYSSTAT table.
+  -- Select snapshots between start_snap_id and end_snap_id.
+  -- Convert CPU centiseconds into seconds.
+(SELECT snap_id,
+  event,
+  time_waited_micro / 1000000 AS time_spent
+FROM stats$system_event NATURAL JOIN v$event_name
+WHERE snap_id between &&start_snap_id and &&end_snap_id
+  AND wait_class# != 6
+UNION ALL
+SELECT snap_id,
+  'CPU used by this session' AS event,
+  VALUE / 100 as time_spent
+FROM stats$sysstat
+WHERE snap_id between &&start_snap_id and &&end_snap_id
+  AND name = 'CPU used by this session'),
+------------------------------------------------------------------------------------
+deltas AS
+-- Use the LAG analytic function to determine the amount of increase.
+-- Partition the rows by database startup time.
+-- The STATS$SNAPSHOT view tells us when the database was started.
+(SELECT snap_id,
+  snap_time,
+  event,
+(snap_time – LAG (snap_time)
+  OVER (PARTITION BY startup_time, event ORDER BY snap_id)) * 86400
+  AS snap_time_d,
+time_spent - LAG (time_spent)
+  OVER (PARTITION BY startup_time, event ORDER BY snap_id)
+  AS time_spent_d
+FROM timed_events NATURAL JOIN stats$snapshot),
+------------------------------------------------------------------------------------
+ranks AS
+-- Use the RANK analytic function to rank the events.
+-- Also compute the percentage contribution of each event.
+(SELECT snap_id,
+  snap_time,
+  event,
+  snap_time_d,
+  time_spent_d,
+  RANK()
+    OVER (PARTITION BY snap_id ORDER BY time_spent_d DESC)
+    AS rank,
+decode(time_spent_d, 0, 0, time_spent_d / SUM(time_spent_d)
+  OVER (PARTITION BY snap_id) * 100)
+  AS percentage
+FROM deltas
+WHERE time_spent_d IS NOT NULL)
+------------------------------------------------------------------------------------
+-- Compute Average Active Sessions for each category of time.
+-- List the top 5 events.
+SELECT snap_id,
+  snap_time,
+  rank,
+  substr(event, 1, 30) as event,
+  time_spent_d,
+  time_spent_d / snap_time_d as aas,
+  percentage
+FROM ranks
+WHERE rank <= 5
+ORDER BY snap_id,
+  rank;
+  
+  
+Page 310, Exercise Queries
+
+SELECT constraint_name
+FROM dba_constraints
+WHERE owner = 'HR'
+  AND table_name = 'EMPLOYEES'
+  AND constraint_type = 'P';
+
+SELECT constraint_name,
+  owner,
+  table_name
+FROM dba_constraints
+WHERE constraint_type = 'R'
+  AND r_owner = 'HR'
+  AND r_constraint_name = 'EMP_EMP_ID_PK';
+
+SELECT column_name,
+  position
+FROM dba_cons_columns
+WHERE owner = 'HR'
+AND constraint_name = 'EMP_EMP_ID_PK';
+
+SELECT column_name,
+  position
+FROM dba_cons_columns
+WHERE owner = 'HR'
+AND constraint_name = 'EMP_MANAGER_FK';
+  
+SELECT e2.first_name AS manager_first_name,
+  e2.last_name AS manager_last_name,
+  e1.first_name AS employee_first_name,
+  e1.last_name AS employee_last_name
+FROM hr.employees e1,
+  hr.employees e2
+WHERE e2.employee_id = e1.manager_id
+ORDER BY 1, 2, 3, 4; 
+
+
+
+  

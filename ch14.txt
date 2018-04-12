@@ -1,0 +1,134 @@
+Chapter 14
+
+Page 257, Listing 14-1
+
+SET serveroutput on
+
+DECLARE
+  l_full_blocks NUMBER;
+  l_fs1_blocks NUMBER;
+  l_fs2_blocks NUMBER;
+  l_fs3_blocks NUMBER;
+  l_fs4_blocks NUMBER;
+  l_unformatted_blocks NUMBER;
+  l_full_bytes NUMBER;
+  l_fs1_bytes NUMBER;
+  l_fs2_bytes NUMBER;
+  l_fs3_bytes NUMBER; 
+  l_fs4_bytes NUMBER;
+  l_unformatted_bytes NUMBER;
+BEGIN
+  DBMS_SPACE.space:usage (segment_owner => 'SYSMAN',
+    segment_name => 'MGMT_JOB_EXEC_SUMMARY',
+    segment_type => 'TABLE',
+    full_blocks => l_full_blocks,
+    fs1_blocks => l_fs1_blocks,
+    fs2_blocks => l_fs2_blocks,
+    fs3_blocks => l_fs3_blocks,
+    fs4_blocks => l_fs4_blocks,
+    unformatted_blocks => l_unformatted_blocks,
+    full_bytes => l_full_bytes,
+    fs1_bytes => l_fs1_bytes,
+    fs2_bytes => l_fs2_bytes,
+    fs3_bytes => l_fs3_bytes,
+    fs4_bytes => l_fs4_bytes,
+    unformatted_bytes => l_unformatted_bytes
+  );
+DBMS_OUTPUT.put_line ('Full blocks:' || l_full_blocks);
+DBMS_OUTPUT.put_line ('Upto 25% free:' || l_fs1_blocks);
+DBMS_OUTPUT.put_line ('Upto 50% free:' || l_fs2_blocks);
+DBMS_OUTPUT.put_line ('Upto 75% free:' || l_fs3_blocks);
+DBMS_OUTPUT.put_line ('Upto 100% free:' || l_fs4_blocks);
+DBMS_OUTPUT.put_line ('Unformatted blocks:' || l_unformatted_blocks);
+END;
+/
+
+
+Page 260, Listing 14-5
+
+SELECT TIMESTAMP AS "LOGON", 
+  logoff_time AS "LOGOFF",
+  logoff_lread AS "GETS",
+  logoff_pread AS "READS",
+  logoff_lwrite AS "WRITES",
+  session_cpu AS "CPU"
+FROM dba_audit_session
+WHERE username = 'IGGY'
+  AND logoff_time IS NOT NULL
+ORDER BY TIMESTAMP;
+
+
+Page 261, Listing 14-6
+
+SELECT audit_option,
+  CASE
+    WHEN user_name IS NOT NULL
+    THEN user_name
+  ELSE 'ALL USERS'
+  END AS username
+FROM dba_stmt_audit_opts
+ORDER BY audit_option, user_name;
+
+
+Page 263, Listing 14-7
+
+SELECT tablespace:name,
+  file_name,
+  file_id,
+  BYTES / 1024 AS kb,
+  autoextensible,
+  increment_by * 8192 / 1024 AS next_kb,
+  maxbytes / 1024 AS max_kb
+FROM dba_data_files
+ORDER BY tablespace:name,
+  file_id;
+  
+  
+Page 265, Listing 14-9
+
+COLUMN busy_time FORMAT 9999999990
+COLUMN idle_time FORMAT 9999999990
+
+SELECT *
+FROM (SELECT snap_id, osstat_id, value FROM stats$osstat
+WHERE SNAP_ID IN (3000, 3001))
+  PIVOT
+    (SUM(value) FOR osstat_id IN (1 AS idle_time, 2 AS busy_time));
+
+
+Page 265, Listing 14-10
+
+COLUMN busy_time FORMAT 9999999990
+COLUMN idle_time FORMAT 9999999990
+
+SELECT snap_id,
+  idle_time - LAG (idle_time) OVER (ORDER BY snap_id) AS idle_time,
+  busy_time - LAG (busy_time) OVER (ORDER BY snap_id) AS busy_time
+FROM (SELECT snap_id, osstat_id, value FROM stats$osstat
+WHERE SNAP_ID IN (3000, 3001))
+  PIVOT
+    (SUM(value) FOR osstat_id IN (1 AS idle_time, 2 AS busy_time));
+	
+	
+Page 266, Listing 14-11
+
+WITH osstat AS
+  (SELECT snap_id,
+    LAG (snap_id) OVER (ORDER BY snap_id) AS prev_snap_id,
+    idle_time - LAG (idle_time) OVER (ORDER BY snap_id) AS idle_time,
+    busy_time - LAG (busy_time) OVER (ORDER BY snap_id) AS busy_time
+  FROM (SELECT snap_id, osstat_id, value FROM stats$osstat)
+    PIVOT
+    (SUM(value) FOR osstat_id IN (1 AS idle_time, 2 AS busy_time)))
+SELECT s1.snap_time,
+  o.busy_time / (o.idle_time + o.busy_time) AS cpu_utilization
+FROM osstat o,
+  stats$snapshot s1,
+  stats$snapshot s2
+WHERE s1.snap_id = o.snap_id
+  AND s2.snap_id = o.prev_snap_id
+  AND s2.startup_time = s1.startup_time
+ORDER BY s1.snap_id;
+
+
+

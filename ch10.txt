@@ -1,0 +1,240 @@
+Chapter 10
+
+Page 178, Listing 10-2
+
+SELECT TIMESTAMP,
+action_name,
+sql_text
+FROM dba_audit_object
+WHERE owner = 'IFERNANDEZ'
+ORDER BY TIMESTAMP;
+
+
+Page 179, Listing 10-3
+
+SELECT userhost,
+  os_username,
+  username,
+  COUNT (*)
+FROM dba_audit_session
+GROUP BY userhost,
+  os_username,
+  username
+ORDER BY userhost,
+  os_username,
+  username;
+  
+SELECT TIMESTAMP AS logon_time,
+  logoff_time
+FROM dba_audit_session
+WHERE username = 'SOE'
+ORDER BY 1;
+
+
+Page 180, Listing 10-4
+
+SELECT tablespace:name,
+  SUM (BYTES) / 1048576 AS mb
+FROM dba_data_files
+GROUP BY tablespace:name
+ORDER BY tablespace:name;
+
+
+Page 181, Listing 10-5
+
+WITH ranked_information AS
+  (SELECT owner,
+    segment_name,
+    BYTES / 1048576 AS mb,
+    RANK () OVER (ORDER BY BYTES DESC) AS RANK
+  FROM dba_segments
+WHERE segment_type = 'TABLE')
+SELECT RANK,
+  owner,
+  segment_name,
+  mb
+FROM ranked_information
+WHERE RANK <= 10
+ORDER BY RANK;
+
+
+Page 183, Listing 10-7
+
+WITH
+-- Pivot the data in the STATS$SYSSTAT table
+-- Create separate columns for physical reads and logical reads
+pivoted_data AS
+(SELECT *
+FROM (SELECT snap_id,
+    NAME,
+    VALUE
+  FROM stats$sysstat)
+  PIVOT (SUM(value)
+    FOR name IN ('physical reads' AS physical_reads,
+      'session logical reads' AS logical_reads))),
+      deltas AS
+-- Use the LAG analytic function to determine the amount of increase
+(SELECT snap_id,
+  snap_time,
+  snap_time
+  - LAG (snap_time)
+OVER (PARTITION BY startup_time
+ORDER BY snap_id)
+AS duration,
+  184
+  physical_reads
+  - LAG (physical_reads)
+OVER (PARTITION BY startup_time
+ORDER BY snap_id)
+AS physical_reads,
+  logical_reads
+  - LAG (logical_reads)
+OVER (PARTITION BY startup_time
+ORDER BY snap_id)
+AS logical_reads
+FROM pivoted_data NATURAL JOIN stats$snapshot)
+SELECT snap_id,
+  to_char(snap_time, 'yyyy/mm/dd hh24:mi') as snap_time,
+  physical_reads / duration / (24 * 60 * 60) as physical_reads_per_second,
+  logical_reads / duration / (24 * 60 * 60) AS logical_reads_per_second
+FROM deltas
+ORDER BY snap_id;
+
+
+Page 185, Listing 10-8
+
+WITH pivoted_data AS
+-- Pivot the data in STATS$SQL_SUMMARY using two values of the SQL ID column.
+-- q1 and q2 refer to the two values of interest in the SQL ID column.
+-- Create new columns representing the total elapsed time and the number of
+-- executions of each of the two queries.
+-- The newly created columns are named as follows:
+-- q1_elapsed_time
+-- q1_executions
+-- q2_elapsed_time
+-- q2_executions
+(SELECT *
+FROM (SELECT snap_id,
+  sql_id,
+  elapsed_time,
+  executions
+FROM stats$sql_summary)
+PIVOT (SUM(elapsed_time) AS elapsed_time,
+  SUM(executions) AS executions
+  FOR sql_id IN ('&&1' AS q1,
+  '&&2' AS q2))),
+  interpolated_data AS
+-- Interpolate any missing values using the LAST_VALUE analytic function.
+-- Use the last non-null value after the database was started.
+-- The STATS$SNAPSHOT view tells us when the database was started.
+(SELECT snap_id,
+  snap_time,
+  startup_time,
+  LAST_VALUE (q1_elapsed_time IGNORE NULLS)
+OVER (PARTITION BY startup_time
+ORDER BY snap_id
+ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+AS q1_elapsed_time_i,
+  LAST_VALUE (q1_executions IGNORE NULLS)
+  OVER (PARTITION BY startup_time
+ORDER BY snap_id
+ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+AS q1_executions_i,
+  LAST_VALUE (q2_elapsed_time IGNORE NULLS)
+  OVER (PARTITION BY startup_time
+ORDER BY snap_id
+ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+AS q2_elapsed_time_i,
+  LAST_VALUE (q2_executions IGNORE NULLS)
+  OVER (PARTITION BY startup_time
+ORDER BY snap_id
+ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+AS q2_executions_i
+FROM pivoted_data NATURAL JOIN stats$snapshot),
+deltas AS
+-- Use the LAG analytic function to determine the amount of increase.
+(SELECT snap_id,
+snap_time,
+  q1_elapsed_time_i
+  - LAG (q1_elapsed_time_i)
+OVER (PARTITION BY startup_time
+ORDER BY snap_id)
+AS q1_elapsed_time_d,
+  q1_executions_i
+  - LAG (q1_executions_i)
+OVER (PARTITION BY startup_time
+ORDER BY snap_id)
+AS q1_executions_d,
+  q2_elapsed_time_i
+  - LAG (q2_elapsed_time_i)
+OVER (PARTITION BY startup_time
+ORDER BY snap_id)
+AS q2_elapsed_time_d,
+  q2_executions_i
+  - LAG (q2_executions_i)
+OVER (PARTITION BY startup_time
+ORDER BY snap_id)
+AS q2_executions_d
+FROM interpolated_data)
+-- Print the number of executions and average execution time for each time period.
+-- Convert microseconds to seconds when printing the average execution time.
+-- Don't print any negative values.
+SELECT snap_id,
+  TO_CHAR (snap_time, 'yyyy/mm/dd hh24:mi') AS snap_time,
+CASE
+WHEN q1_elapsed_time_d > 0 AND q1_executions_d > 0
+THEN q1_executions_d
+END AS q1_executions_d,
+CASE
+WHEN q1_elapsed_time_d > 0 AND q1_executions_d > 0
+THEN q1_elapsed_time_d / q1_executions_d / 1000000
+END AS q1_elapsed_time_a,
+CASE
+WHEN q2_elapsed_time_d > 0 AND q2_executions_d > 0
+THEN q2_executions_d
+END AS q2_executions_d,
+CASE
+WHEN q2_elapsed_time_d > 0 AND q2_executions_d > 0
+THEN q2_elapsed_time_d / q2_executions_d / 1000000
+END AS q2_elapsed_time_a
+FROM deltas
+ORDER BY snap_id;
+
+
+Page 188, Listing 10-10
+
+WITH
+pivoted_data AS
+-- Pivot the data in the STATS$OSSTAT table
+-- Create separate columns for total idle time and total busy time
+(SELECT *
+FROM (SELECT snap_id,
+  osstat_id,
+VALUE
+FROM stats$osstat)
+  PIVOT (SUM(value)
+  FOR osstat_id IN (1 AS idle_time,
+  2 AS busy_time))),
+deltas AS
+-- Use the LAG analytic function to determine the amount of increase
+(SELECT snap_id,
+  snap_time,
+  idle_time
+  - LAG (idle_time)
+OVER (PARTITION BY startup_time
+ORDER BY snap_id)
+AS idle_time,
+  busy_time
+  - LAG (busy_time)
+OVER (PARTITION BY startup_time
+ORDER BY snap_id)
+AS busy_time
+FROM pivoted_data NATURAL JOIN stats$snapshot)
+SELECT snap_id,
+  to_char(snap_time, 'yyyy/mm/dd hh24:mi') as snap_time,
+  busy_time / (idle_time + busy_time) AS cpu_utilization_p
+FROM deltas
+ORDER BY snap_id;
+
+
+

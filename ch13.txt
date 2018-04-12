@@ -1,0 +1,109 @@
+Chapter 13
+
+Page 237, listing 13-1
+
+impdp system/oracle@pdb1 directory=pdb1_data_pump_dir dumpfile=expdat.dmp tables=hr.employees table_exists_action=replace
+
+
+Page 238, Flashback Query Example
+
+UPDATE employees
+SET salary=salary + 1000
+WHERE employee_id = 101;
+
+SELECT salary
+FROM employees
+WHERE employee_id = 101;
+
+COMMIT;
+
+SELECT salary
+FROM employees AS OF TIMESTAMP SYSDATE - 1/24
+WHERE employee_id = 101;
+
+UPDATE employees
+  SET salary = (SELECT salary
+    FROM employees AS OF TIMESTAMP SYSDATE - 1/24
+    WHERE employee_id = 101)
+  WHERE employee_id = 101;
+  
+COMMIT;
+
+SELECT salary
+FROM employees
+WHERE employee_id = 101;
+
+COLUMN versions_starttime FORMAT a32
+SELECT versions_starttime,
+versions_xid,
+salary
+FROM employees VERSIONS BETWEEN TIMESTAMP SYSDATE - 1/24 AND SYSDATE
+WHERE employee_id = 101;
+
+
+Page 240, Flashback Transaction
+
+SELECT undo_sql
+FROM flashback_transaction_query
+WHERE XID = '09001000D4030000';
+
+
+Page 240, Flashback Table
+
+UPDATE employees
+SET salary=salary + 1000;
+
+COMMIT;
+
+FLASHBACK TABLE employees TO TIMESTAMP SYSDATE - 1/24;
+
+ALTER TABLE employees ENABLE ROW MOVEMENT;
+
+FLASHBACK TABLE employees TO TIMESTAMP SYSDATE - 1/24;
+
+
+Page 241, Flashback Drop
+
+CREATE TABLE employees_backup AS SELECT * FROM employees;
+
+SELECT COUNT (*)
+FROM employees_backup;
+
+DROP TABLE employees_backup;
+
+DESCRIBE user_recyclebin;
+
+SELECT object_name,
+original_name
+FROM user_recyclebin;
+
+FLASHBACK TABLE employees_backup TO BEFORE DROP;
+
+SELECT COUNT (*)
+FROM employees_backup;
+
+DROP TABLE employees_backup;
+
+PURGE user_recyclebin;
+
+FLASHBACK TABLE employees_backup TO BEFORE DROP;
+
+
+Page 243, LogMiner Example
+Note that the following are example commands that ran on the author's machine.
+You will need to modify them to run on your machine, because you will have 
+a different directory structure.
+
+EXECUTE DBMS_LOGMNR.add_logfile (logfilename => 'C:\APP\IGNATIUS\FLASH_RECOVERY_AREA\ORCL\ARCHIVELOG\2008_09_20\O1_MF_1_77_4FBYS33F_.ARC', options => DBMS_LOGMNR.NEW);
+
+EXECUTE DBMS_LOGMNR.add_logfile (logfilename => 'C:\APP\IGNATIUS\FLASH_RECOVERY_AREA\ORCL\ARCHIVELOG\2008_09_20\O1_MF_1_78_4FBYS6J3_.ARC', options => DBMS_LOGMNR.addfile);
+
+EXECUTE DBMS_LOGMNR.add_logfile (logfilename => 'C:\APP\IGNATIUS\FLASH_RECOVERY_AREA\ORCL\ARCHIVELOG\2008_09_20\O1_MF_1_79_4FBYSO0H_.ARC', options => DBMS_LOGMNR.addfile);
+
+SELECT sql_undo
+FROM v$logmnr_contents
+WHERE seg_name = 'EMPLOYEES'
+AND ROWNUM < 5;
+
+
+

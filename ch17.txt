@@ -1,0 +1,208 @@
+Chapter 17
+
+Page 317, Index Queries
+
+SELECT table_name,
+  index_name
+FROM user_indexes
+WHERE table_name in ('MY_TABLES', 'MY_INDEXES');
+
+SELECT table_name,
+  index_name,
+  column_name,
+  column_position
+FROM user_ind_columns
+WHERE table_name in ('MY_TABLES', 'MY_INDEXES');
+
+
+Page 319, Example using hints
+
+SELECT /*+ INDEX(MY_INDEXES (INDEX_TYPE))
+INDEX(MY_TABLES (OWNER TABLE_NAME))
+LEADING(MY_INDEXES MY_TABLES)
+USE_NL(MY_TABLES)
+*/
+DISTINCT my_tables.owner,
+my_tables.table_name,
+my_tables.tablespace:name
+FROM my_tables, my_indexes
+WHERE my_tables.owner = my_indexes.table_owner
+AND my_tables.table_name = my_indexes.table_name
+AND my_indexes.index_type = :index_type;
+
+
+Page 323, Creating and Populating Tables
+
+CREATE TABLE my_tables AS
+SELECT dba_tables.* FROM dba_tables;
+
+CREATE TABLE my_indexes AS
+SELECT dba_indexes.*
+FROM dba_tables,
+  dba_indexes
+WHERE dba_tables.owner = dba_indexes.table_owner
+  AND dba_tables.table_name = dba_indexes.table_name;
+
+/* Count the records in the my_tables table */
+SELECT COUNT(*) FROM my_tables;
+
+Count the records in the my_indexes table */
+SELECT COUNT(*) FROM my_indexes;
+
+
+Page 324, Establishing a Baseline
+
+SELECT DISTINCT my_tables.owner,
+  my_tables.table_name,
+  my_tables.tablespace:name
+FROM my_tables,
+  my_indexes
+WHERE my_tables.owner = my_indexes.table_owner
+  AND my_tables.table_name = my_indexes.table_name
+  AND my_indexes.index_type = :index_type
+  
+
+Page 324, Second Example
+
+ALTER SESSION SET statistics_level=ALL;
+
+SET AUTOTRACE ON statistics
+VARIABLE index_type VARCHAR2(32);
+EXEC :index_type := 'FUNCTION-BASED NORMAL';
+
+column owner format a30
+column table_name format a30
+column tablespace:name format a30
+
+set linesize 100
+set pagesize 100
+
+SELECT DISTINCT my_tables.owner,
+  my_tables.table_name,
+  my_tables.tablespace:name
+FROM my_tables,
+  my_indexes
+WHERE my_tables.owner = my_indexes.table_owner
+  AND my_tables.table_name = my_indexes.table_name
+  AND my_indexes.index_type = :index_type;
+  
+  
+Page 331, Indexes and Statistics
+
+ALTER TABLE my_tables
+ADD (CONSTRAINT my_tables_pk PRIMARY KEY (owner, table_name));
+
+ALTER TABLE my_indexes
+ADD (CONSTRAINT my_indexes_pk PRIMARY KEY (owner, index_name));
+
+ALTER TABLE my_indexes
+ADD (CONSTRAINT my_indexes_fk1 FOREIGN KEY (table_owner, table_name)
+REFERENCES my_tables);
+
+CREATE INDEX my_indexes_i1 ON my_indexes (index_type);
+
+CREATE INDEX my_indexes_fk1 ON my_indexes (table_owner, table_name);
+
+EXEC DBMS_STATS.gather_table_stats(user,tabname=>'MY_TABLES');
+EXEC DBMS_STATS.gather_table_stats(user,tabname=>'MY_INDEXES');
+  
+  
+Page 332, Using SQL Access Advisor
+
+VARIABLE tuning_task VARCHAR2(32);
+EXEC :tuning_task := dbms_sqltune.create_tuning_task (sql_id => '2794xwzhab8yb');
+
+EXEC dbms_sqltune.execute_tuning_task(task_name => :tuning_task);
+
+SET LONG 100000;
+SET PAGESIZE 1000
+SET LINESIZE 200
+COLUMN recommendations FORMAT a200
+
+SELECT DBMS_SQLTUNE.report_tuning_task (:tuning_task) AS recommendations FROM
+DUAL;
+
+
+Page 334, Optimizer Hints Example
+
+SELECT /*+ INDEX(MY_INDEXES (INDEX_TYPE))
+  INDEX(MY_TABLES (OWNER TABLE_NAME))
+  LEADING(MY_INDEXES MY_TABLES)
+  USE_NL(MY_TABLES)
+  */
+  DISTINCT my_tables.owner,
+  my_tables.table_name,
+  my_tables.tablespace:name
+FROM my_tables,
+  my_indexes
+WHERE my_tables.owner = my_indexes.table_owner
+  AND my_tables.table_name = my_indexes.table_name
+  AND my_indexes.index_type = :index_type;
+  
+  
+Page 336, Extreme Tuning Example
+
+CREATE CLUSTER my_cluster (index_type VARCHAR2(27)) SIZE 8192 HASHKEYS 5;
+
+CREATE MATERIALIZED VIEW LOG ON my_tables WITH ROWID;
+
+CREATE MATERIALIZED VIEW LOG ON my_indexes WITH ROWID;
+
+CREATE MATERIALIZED VIEW my_mv
+  CLUSTER my_cluster (index_type)
+  REFRESH FAST ON COMMIT
+  ENABLE QUERY REWRITE
+AS
+SELECT t.ROWID AS table_rowid,
+  t.owner AS table_owner,
+  t.table_name,
+  t.tablespace:name,
+  i.ROWID AS index_rowid,
+  i.index_type
+FROM my_tables t,
+  my_indexes i
+WHERE t.owner = i.table_owner
+  AND t.table_name = i.table_name;
+  
+EXEC DBMS_STATS.gather_table_stats(user, tabname=>'MY_MV');
+
+SELECT DISTINCT my_tables.owner,
+  my_tables.table_name,
+  my_tables.tablespace:name
+FROM my_tables,
+  my_indexes
+WHERE my_tables.owner = my_indexes.table_owner
+  AND my_tables.table_name = my_indexes.table_name
+  AND my_indexes.index_type = :index_type;
+  
+  
+Page 337, But Wait, There's More!
+
+SELECT /*+ RESULT_CACHE
+*/
+DISTINCT my_tables.owner,
+  my_tables.table_name,
+  my_tables.tablespace:name
+FROM my_tables,
+  my_indexes
+WHERE my_tables.owner = my_indexes.table_owner
+  AND my_tables.table_name = my_indexes.table_name
+  AND my_indexes.index_type = :index_type;
+  
+  
+  
+
+
+
+
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  

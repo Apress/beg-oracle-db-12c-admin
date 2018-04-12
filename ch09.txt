@@ -1,0 +1,14 @@
+Chapter 9
+
+Page 161, Listing 9-1
+
+CONNECT system
+
+CREATE USER ifernand
+IDENTIFIED BY change_immediately
+PASSWORD EXPIRE;
+
+GRANT DBA TO ifernand;
+
+CONNECT ifernand
+

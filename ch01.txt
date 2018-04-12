@@ -1,0 +1,49 @@
+Chapter 1
+
+Page 18, Listing 1-1
+
+WITH
+	-- Step 1
+	all_employees AS
+	( SELECT employee_id FROM employees
+	),
+	-- Step 2
+	all_jobs AS
+	( SELECT job_id FROM jobs
+	),
+	-- Step 3
+	selected_jobs AS
+	( SELECT * FROM all_jobs WHERE job_id LIKE 'AC%'
+	),
+	-- Step 4
+	selected_pairings AS
+	( SELECT * FROM all_employees, selected_jobs
+	),
+	-- Step 5
+	current_job_titles AS
+	( SELECT employee_id, job_id FROM employees
+	),
+	-- Step 6
+	previous_job_titles AS
+	( SELECT employee_id, job_id FROM job_history
+	),
+	-- Step 7
+	complete_job_history AS
+	( SELECT * FROM current_job_titles
+	UNION
+	SELECT * FROM previous_job_titles
+	),
+	-- Step 8
+	nonexistent_pairings AS
+	( SELECT * FROM selected_pairings
+	MINUS
+	SELECT * FROM complete_job_history
+	),
+	-- Step 9
+	undesired_employees AS
+	( SELECT employee_id FROM nonexistent_pairings
+	)
+-- Step 10
+SELECT * FROM all_employees
+MINUS
+SELECT * FROM undesired_employees

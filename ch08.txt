@@ -1,0 +1,142 @@
+Chapter 8
+
+Many of the examples in this chapter are single-line commands.
+In most cases, I have left those for the student to type.
+
+Page 135, Listing 8-1
+
+sqlplus sys/oracle as sysdba
+
+SELECT object_type, COUNT (*)
+FROM dba_objects
+WHERE owner = 'HR'
+GROUP BY object_type
+ORDER BY 2 DESC;
+
+
+Page 136, Listing 8-2
+
+SELECT object_type, COUNT (*)
+FROM dba_objects
+WHERE owner = 'SYS'
+GROUP BY object_type
+ORDER BY 2 DESC;
+
+
+Page 138, Listing 8-3
+
+SELECT segment_type, COUNT(*)
+FROM dba_segments
+WHERE owner = 'SYS'
+GROUP BY segment_type
+ORDER BY 2 DESC;
+
+
+Page 138, Listing 8-4
+
+describe dba_tables
+
+
+Page 140, Listing 8-5
+
+CONNECT hr
+
+SELECT object_type,
+COUNT (*)
+FROM dba_objects
+GROUP BY object_type
+ORDER BY 2 DESC;
+
+SELECT object_type,
+COUNT (*)
+FROM user_objects
+GROUP BY object_type
+ORDER BY 2 DESC;
+
+SELECT owner,
+object_type,
+COUNT (*)
+FROM all_objects
+WHERE object_type = 'TABLE'
+GROUP BY owner,
+object_type
+ORDER BY 3 DESC;
+
+
+Page 141, Listing 8-6
+
+CONNECT system
+
+CREATE USER ifernand
+IDENTIFIED BY qazwsxedc;
+
+
+Page 142, Listing 8-7
+
+CONNECT system
+
+COLUMN username format a20 heading "USER|NAME"
+COLUMN created format a10 heading "CREATED"
+COLUMN default_tablespace format a10 heading "DEFAULT|TABLESPACE"
+COLUMN temporary_tablespace format a10 heading "TEMPORARY|TABLESPACE"
+COLUMN profile format a20 heading "PROFILE"
+
+SELECT username,
+created,
+default_tablespace,
+temporary_tablespace,
+PROFILE
+FROM dba_users
+ORDER BY created;
+
+
+Page 143, Listing 8-8
+
+CONNECT system
+
+COLUMN resource:type format a15 heading "RESOURCE TYPE"
+COLUMN resource:name format a30 heading "RESOURCE NAME"
+COLUMN limit format a15 heading "LIMIT"
+
+SELECT resource:type,
+  resource:name,
+  LIMIT
+FROM dba_profiles
+WHERE PROFILE = 'DEFAULT'
+ORDER BY resource:type, resource:name;
+
+
+Page 145, Create TEST TABLE
+CONNECT ifernand
+
+CREATE TABLE TEST (dummy VARCHAR2(1))
+STORAGE (INITIAL 128 m)
+TABLESPACE example;
+
+CREATE TABLE TEST (dummy VARCHAR2(1))
+STORAGE (INITIAL 128 m);
+
+
+Page 146, Query for the TEST segment
+
+SELECT tablespace:name
+FROM user_segments
+3HERE segment_name = 'TEST';
+
+
+Page 156, Listing 8-17
+
+LOAD DATA
+INFILE *
+INTO TABLE DEPT
+FIELDS TERMINATED BY ',' OPTIONALLY ENCLOSED BY '"'
+(DEPTNO, DNAME, LOC)
+BEGINDATA
+12,RESEARCH,"SARATOGA"
+10,"ACCOUNTING",CLEVELAND
+11,"ART",SALEM
+13,FINANCE,"BOSTON"
+21,"SALES",PHILA.
+22,"SALES",ROCHESTER
+42,"INT'L","SAN FRAN"
+

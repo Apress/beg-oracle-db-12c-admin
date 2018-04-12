@@ -1,0 +1,14 @@
+Chapter 3
+
+Page 55, Database service description example
+
+pdb1 =
+  (description =
+    (address = (protocol = tcp)(host = 192.168.56.101)(PORT = 1521))
+    (connect_data =
+  (server = dedicated)
+  (service:name = pdb1)
+  )
+)
+
+
